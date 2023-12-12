@@ -1,4 +1,5 @@
-﻿using JWTAuth.WebApi.Models;
+﻿using JWTAuth.WebApi.Dtos;
+using JWTAuth.WebApi.Models;
 using JWTAuth.WebApi.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -25,36 +26,15 @@ namespace JWTAuth.WebApi.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Post(string email, string password)
+        public async Task<IActionResult> Post(LoginDto loginDto)
         {
-            if (!string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(password))
+            if (loginDto != null && !string.IsNullOrEmpty(loginDto.Email) && !string.IsNullOrEmpty(loginDto.Password))
             {
-                var user = await GetUser(email, password);
+                Employee? emp = await GetUser(loginDto.Email, loginDto.Password);
 
-                if (user != null)
+                if (emp != null)
                 {
-                    //create claims details based on the user information
-                    var claims = new[] {
-                        new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
-                        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                        new Claim(JwtRegisteredClaimNames.Iat, DateTime.UtcNow.ToString()),
-                        new Claim("Id", user.Id.ToString()),
-                        new Claim("DisplayName", user.EmployeeName),
-                        new Claim("Email", user.Email),
-                        new Claim("JobTitle", user.JobTitle),
-                        new Claim("Gender", user.Gender)
-                    };
-
-                    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-                    var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-                    var token = new JwtSecurityToken(
-                        _configuration["Jwt:Issuer"],
-                        _configuration["Jwt:Audience"],
-                        claims,
-                        expires: DateTime.UtcNow.AddMinutes(10),
-                        signingCredentials: signIn);
-
-                    return Ok(new JwtSecurityTokenHandler().WriteToken(token));
+                    return Ok(GenerateAccessToken(emp));
                 }
                 else
                 {
@@ -65,6 +45,34 @@ namespace JWTAuth.WebApi.Controllers
             {
                 return BadRequest();
             }
+        }
+
+
+        private string GenerateAccessToken(Employee emp)
+        {
+            //create claims details based on the user information
+            var claims = new[] {
+                        new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
+                        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                        new Claim(JwtRegisteredClaimNames.Iat, DateTime.UtcNow.ToString()),
+                        new Claim("Id", emp.Id.ToString()),
+                        new Claim("DisplayName", emp.EmployeeName),
+                        new Claim("Email", emp.Email),
+                        new Claim("JobTitle", emp.JobTitle),
+                        new Claim("Gender", emp.Gender)
+                    };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var token = new JwtSecurityToken(
+                _configuration["Jwt:Issuer"],
+                _configuration["Jwt:Audience"],
+                claims,
+                expires: DateTime.UtcNow.AddMinutes(30),
+                signingCredentials: signIn);
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+
         }
 
         private async Task<Employee> GetUser(string email, string password)
